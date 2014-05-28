@@ -30,7 +30,7 @@ using namespace cv;
 using namespace std;
 
 list<Mat> readImagesFromDirectory(string dirpath = "bilder") {
-	
+	cout<<"huh"<<endl;
 	list<Mat> imagelist;
 	list<string> filenames;	
 	// create directory object and open it
@@ -66,14 +66,14 @@ list<Mat> readImagesFromDirectory(string dirpath = "bilder") {
 	for(iter = filenames.begin(); iter != filenames.end(); iter++)
 	{
 		// create image from file
-		Mat img = imread(dirpath+"/"+(*iter), -1);
+		Mat img = imread(dirpath+"/"+(*iter), 0);
 		if(img.data)
 		{
 			imagelist.push_back(img);
-			/*ostringstream os;
+			ostringstream os;
 			os << "original " << i << ".png";
 			namedWindow(os.str(), CV_WINDOW_AUTOSIZE);
-			imshow(os.str(), img);*/
+			imshow(os.str(), img);
 		}
 		i++;
 	}
@@ -83,7 +83,18 @@ list<Mat> readImagesFromDirectory(string dirpath = "bilder") {
 
 int main( int argc, char** argv )
 {
-	list<Mat> images;
-	images=readImagesFromDirectory();
-	
+	list<Mat> images=readImagesFromDirectory();
+	int i=0;
+	while(!images.empty()){
+		Mat image=images.front();
+		images.pop_front();
+		ostringstream os;
+		os << i;
+		namedWindow(os.str(), CV_WINDOW_AUTOSIZE);
+		imshow(os.str(), image);
+		cout<<i<<endl;
+		i++;
+	}
+	waitKey(0);
+
 }

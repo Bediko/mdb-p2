@@ -9,30 +9,12 @@
 
 #define PI 3.1415
 
-#define HMAX 255
-#define SMAX 255
-#define VMAX 255
-
-#define HBINS 16
-#define SBINS 3
-#define VBINS 3
-
-const double DHMAX = 360;
-const double DSMAX = 1;
-const double DVMAX = 1;
-
-const int HBIN_SIZE = HMAX / HBINS;
-const int SBIN_SIZE = SMAX / SBINS;
-const int VBIN_SIZE = VMAX / VBINS;
-
-
 using namespace cv;
 using namespace std;
 
-list<Mat> readImagesFromDirectory(string dirpath = "bilder")
+list<pair<Mat, string> > readImagesFromDirectory(string dirpath = "bilder")
 {
-    cout << "huh" << endl;
-    list<Mat> imagelist;
+    list<pair<Mat, string> > imagelist;
     list<string> filenames;
     // create directory object and open it
     tinydir_dir dir;
@@ -70,11 +52,11 @@ list<Mat> readImagesFromDirectory(string dirpath = "bilder")
         Mat img = imread(dirpath + "/" + (*iter), 0);
         if (img.data)
         {
-            imagelist.push_back(img);
-           /* ostringstream os;
-            os << "original " << i << ".png";
-            namedWindow(os.str(), CV_WINDOW_AUTOSIZE);
-            imshow(os.str(), img);*/
+            imagelist.push_back(pair<Mat, string>(img, *iter));
+            /* ostringstream os;
+             os << "original " << i << ".png";
+             namedWindow(os.str(), CV_WINDOW_AUTOSIZE);
+             imshow(os.str(), img);*/
         }
         i++;
     }
@@ -84,39 +66,118 @@ list<Mat> readImagesFromDirectory(string dirpath = "bilder")
 
 double calculateCoarseness(Mat image)
 {
-    double a[6] = {0};
+    //double a[6][image.cols][image.rows];
+    Mat a[6];
+    Mat eh[6];
+    Mat ev[6];
+    int histo[5]={0};
+    Mat sbest = Mat(image.rows, image.cols, CV_64F);
+    Mat bin = Mat(image.rows, image.cols, CV_64F);
+    for (int k = 0; k < 6; k++)
+    {
+        a[k] = Mat(image.rows, image.cols, CV_64F);
+        eh[k] = Mat(image.rows, image.cols, CV_64F);
+        ev[k] = Mat(image.rows, image.cols, CV_64F);
+    }
+    cout << "calculate a..." << endl;
     for (int k = 1; k < 6; k++)
-    {//pow(2,k)/2 should be enough 
-        for (int x = pow(2, k ); x < image.cols-pow(2, k ); x++)
+    {
+        //pow(2,k)/2 should be enough
+        for (int x = pow(2, k -1); x < image.cols - pow(2, k -1) ; x++)
         {
-            for (int y=pow(2, k ); y < image.rows-pow(2, k ); y++)
+            for (int y = pow(2, k -1) ; y < image.rows - pow(2, k -1) ; y++)
             {
-                for (int i = x - pow(2, k - 1); i < x + pow(2, k - 1)-1; i++)
+                for (int i = x - pow(2, k - 1); i < x + pow(2, k - 1) - 1; i++)
                 {
-                    for (int j = y - pow(2, k - 1); j < y + pow(2, k - 1)-1; j++)
+                    for (int j = y - pow(2, k - 1); j < y + pow(2, k - 1) - 1; j++)
                     {
-                        a[k] = ((int)image.at<uchar>(i, j)) / (pow(2, 2 * k));
+                        a[k].at<double>(y, x) += ((int)image.at<uchar>(i, j)) / (pow(2, 2 * k));
                         //cout<<"a["<<k<<"]"<<a[k]<<" i "<<i<<" j "<<j<<" y "<<y<<endl;
                     }
                 }//cout<<"tur"<<endl;
                 //cout<<"hu"<<endl;
             }
         }
-        cout<<k<<endl;
     }
+    cout << "calculate eh and ev..." << endl;
+    for (int k = 1; k < 6; k++)
+    {
+        //pow(2,k)/2 should be enough
+        for (int x = pow(2, k -1) ; x < image.cols - pow(2, k -1) ; x++)
+        {
+            for (int y = pow(2, k -1) ; y < image.rows - pow(2, k -1) ; y++)
+            {
+                eh[k].at<double>(y, x) = fabs(a[k].at<double>(x + pow(2, k - 1), y) - a[k].at<double>(x - pow(2, k - 1), y));
+                ev[k].at<double>(y, x) = fabs(a[k].at<double>(x, y + pow(2, k - 1)) - a[k].at<double>(x, y - pow(2, k - 1)));
+                //cout<<"a["<<k<<"]"<<a[k]<<" i "<<i<<" j "<<j<<" y "<<y<<endl;
+            }
+        }
+    }
+    cout<<"calculate sbest..."<<endl;
+    for (int x = 0; x < image.cols; x++)
+    {
+        for (int y = 0; y < image.rows; y++)
+        {
+            double max = 0;
+            sbest.at<double>(x, y)=2;
+            bin.at<double>(x, y) = 0;
+            for (int k = 1; k < 6; k++)
+            {
+                if (eh[k].at<double>(x, y) >= max)
+                {
+                    max = eh[k].at<double>(x, y);
+                    sbest.at<double>(x, y) = pow(2, k);
+                    bin.at<double>(x, y) = k;
+
+                }
+                if (ev[k].at<double>(x, y) >= max)
+                {
+                    max = ev[k].at<double>(x, y);
+                    sbest.at<double>(x, y) = pow(2, k);
+                    bin.at<double>(x, y) = k;
+                }
+            }
+        }
+    }
+    cout<<"calculate fcrs..."<<endl;
+    double fcrs = 0;
+    for (int x = 0; x < image.cols; x++)
+    {
+        for (int y = 0; y < image.rows; y++)
+        {
+            fcrs += sbest.at<double>(x, y);
+        }
+    }
+    fcrs = fcrs / (image.cols * image.rows);
+    //cout<<fcrs<<endl;
+    for(int i=0;i<6;i++)
+        histo[i]=0;
+    for (int x = 0; x < image.cols; x++)
+    {
+        for (int y = 0; y < image.rows; y++)
+        {
+            histo[(int)bin.at<double>(x, y)]++;
+        }
+    }
+    for(int i=0;i<6;i++)
+        cout<<pow(2,i)<<": "<<histo[i]<<endl;
+    return fcrs;
 }
 
 int main( int argc, char **argv )
 {
-    list<Mat> images = readImagesFromDirectory();
+    list<pair<Mat, string> > images = readImagesFromDirectory();
     int i = 0;
     double a;
+    //a = calculateCoarseness(images.front());
     while (!images.empty())
     {
-        Mat image = images.front();
+        pair<Mat, string>  picture = images.front();
+        Mat image = picture.first;
         images.pop_front();
-        a=calculateCoarseness(image);
-
+        a = calculateCoarseness(image);
+        imshow(picture.second.c_str(), picture.first);
+        cout << picture.second << ": " << a << endl;
     }
     waitKey(0);
 
